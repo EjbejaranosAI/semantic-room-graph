@@ -1,0 +1,75 @@
+# Configuración del controlador SFM para Nav2
+# Esquinas: stride=1 en código, obstacle_cost_threshold 180 (usa inflation), dist_threshold 0.12, lambda 0.7.
+# Ajuste fino: con resolution (local_costmap), inflation_radius y cost_scaling_factor se puede afinar umbral (170–210) y A/B/d.
+
+FollowPath:
+  plugin: "sfm_controller_plugin::SfmController"
+  
+  # === SFM Parameters (Nomenclatura del Paper de Helbing) ===
+  # Repulsión (A, B, d)
+  A: 10.0      # Strength/amplitud
+  B: 1.3       # Range/alcance
+  d: 0.6       # Distancia contacto (ajustado según tus pruebas)
+  
+  # Combinación de fuerzas (α, β, γ, δ)
+  alpha: 1.5   # Peso destino
+  beta: 0.0    # Peso persona objetivo (reservado)
+  gamma: 0.0   # Peso repulsión personas (reservado)
+  delta: 1.0   # Peso obstáculos
+  
+  # Anisotropía (λ): <1 da más peso a obstáculos por delante, menos por detrás → gira antes en esquinas
+  lambda: 0.4  # 0.3–0.5 recomendado; más bajo = más anisotropía, laterales pesan menos
+  
+  # Relajación (k)
+  k_lin: 2.0   # Relajación lineal
+  k_ang: 2.0   # Relajación angular
+  
+  # Otros parámetros del controlador PI
+  d_lin: 0.15  # Derivada lineal
+  d_ang: 0.15  # Derivada angular – bajo para evitar zig-zag
+  max_linear_vel: 0.45
+  max_angular_vel: 0.55
+  tolerance: 0.15
+  
+  # 253 = inscribed+lethal (evita inflation en boca de pasillo); 180 atasca puertas
+  obstacle_cost_threshold: 253.0
+  dist_threshold: 0.12
+  end_force: 0.1
+  # Balance atracción/repulsión: si avanza muy lento o fuerzas "embolatadas", sube goal_force_scale
+  # y/o pon un tope a la repulsión (max_repulsive_magnitude > 0, ej. 12–15)
+  goal_force_scale: 1.5           # Escala de la fuerza atractiva al goal (>1 compite mejor con la repulsión)
+  max_repulsive_magnitude: 5.0     # Tope |F_rep|; 5.0 con 8 sectores es suficiente
+  
+  # Path following
+  lookahead_distance: 1.0
+  # path_align_weight: 1.0  # ELIMINADO - ya no se usa
+  
+  # Transform tolerance (costmap → base_link). In sim, 0.1 can be tight; 0.2–0.3 often fixes TF lookup failures.
+  transform_tolerance: 0.3
+  # Evitar retroceso en puertas: si false (recomendado), cuando la fuerza apunta hacia atrás el robot se detiene en vez de retroceder.
+  allow_backward: false
+  # Sesgo hacia el path: suma (path_bias_gain * dirección_al_goal) a la fuerza total para entrar por puertas y avanzar en pasillos.
+  # 0 = desactivado; 3–5 recomendado para que la resultante apunte hacia adelante.
+  path_bias_gain: 3.0
+  # Paper Eq. 9: f_goal = k_r * (v_desired - v_current). Si true, no usa resorte por distancia.
+  use_goal_relaxation: true
+  
+  # Pure Pursuit style lookahead: prune points already passed
+  prune_distance: 0.3  # Remove path points within this distance (already passed)
+  
+  # Adaptive lookahead: reduce in tight curves/doors (improves entry)
+  use_adaptive_lookahead: true
+  min_lookahead_distance: 0.5   # Minimum lookahead for tight curves/doors
+  max_lookahead_distance: 1.5   # Maximum lookahead for straight paths
+  
+  # Raycast-based frontal obstacle detection thresholds
+  slow_down_dist: 0.5
+  stop_dist: 0.12
+
+  # Visualización (valores aumentados para mejor visibilidad)
+  publish_debug_markers: true
+  publish_debug_stats: true
+  publish_param_stats: true
+  marker_scale: 0.5        # Escala de las flechas (fuerzas); aumentar si no se ven
+  marker_line_scale: 0.08  # Grosor de las flechas; aumentar si son muy finas
+  marker_text_scale: 0.15  # Tamaño del texto; aumentar si no se lee

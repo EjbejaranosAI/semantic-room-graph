@@ -1,0 +1,43 @@
+# ===================================================================
+# Semantic Map Core Parameters
+# ===================================================================
+
+map_ingestor_node:
+  ros__parameters:
+    free_threshold: 50
+    map_topic: "/map"
+
+region_segmentation_node:
+  ros__parameters:
+    morph_kernel_size: 5
+    min_region_area: 500
+    distance_threshold_ratio: 0.3
+
+topological_graph_builder_node:
+  ros__parameters:
+    adjacency_dilation_px: 3
+    min_transition_width_m: 0.3
+
+pose_generator_node:
+  ros__parameters:
+    inspection_offset_m: 0.5
+    safety_margin_px: 5
+
+exploration_planner_node:
+  ros__parameters:
+    replan_on_update: true
+
+navigator_executor_node:
+  ros__parameters:
+    goal_timeout_sec: 120.0
+
+semantic_fusion_node:
+  ros__parameters:
+    vlm_confidence_threshold: 0.60
+    ocr_priority: true
+
+graph_store_node:
+  ros__parameters:
+    output_dir: "/tmp/semantic_map"
+    filename: "semantic_graph.json"
+    auto_save: true

@@ -1,0 +1,20 @@
+# ===================================================================
+# Semantic Map Query Parameters
+# ===================================================================
+
+instruction_parser_node:
+  ros__parameters: {}
+
+semantic_retriever_node:
+  ros__parameters:
+    similarity_threshold: 0.5
+    llm_api_url: "http://localhost:11434/api/generate"
+    llm_model: "llama3"
+    use_llm_fallback: true
+
+goal_resolver_node:
+  ros__parameters: {}
+
+task_navigator_node:
+  ros__parameters:
+    goal_timeout_sec: 180.0

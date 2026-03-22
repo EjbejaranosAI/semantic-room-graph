@@ -1,0 +1,6 @@
+int32 region_id
+string matched_label
+float32 semantic_score
+float32 region_confidence
+float32 navigation_cost
+float32 final_score

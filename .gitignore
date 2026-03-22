@@ -1,0 +1,29 @@
+# ROS2 build artifacts
+build/
+install/
+log/
+.colcon/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+/tmp/
+*.bak
+src/sfm/docs/papers/18_02_2026_sfm_navigation_working.gif

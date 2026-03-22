@@ -1,0 +1,5 @@
+std_msgs/Header header
+int32 source_region_id
+int32 target_region_id
+geometry_msgs/Pose transition_pose
+float32 transition_width

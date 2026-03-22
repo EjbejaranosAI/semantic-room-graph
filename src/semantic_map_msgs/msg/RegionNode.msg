@@ -1,0 +1,10 @@
+std_msgs/Header header
+int32 region_id
+string region_type_geom
+string status
+string semantic_label
+float32 label_confidence
+geometry_msgs/Pose entry_pose
+geometry_msgs/Pose inspection_pose
+string[] ocr_text
+int32[] neighbors

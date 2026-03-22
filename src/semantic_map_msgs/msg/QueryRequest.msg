@@ -1,0 +1,4 @@
+std_msgs/Header header
+string raw_query
+bool has_numeric_reference
+int32 numeric_reference

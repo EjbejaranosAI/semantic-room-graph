@@ -1,0 +1,22 @@
+# ===================================================================
+# Semantic Map Perception Parameters
+# ===================================================================
+
+perception_collector_node:
+  ros__parameters:
+    camera_topic: "/camera/rgb/image_raw"
+    capture_delay_sec: 1.0
+
+ocr_node:
+  ros__parameters:
+    confidence_threshold: 0.4
+    languages: ["en", "es"]
+
+vlm_labeler_node:
+  ros__parameters:
+    # Ollama (local, default)
+    api_url: "http://localhost:11434/api/chat"
+    model_name: "llava"
+    api_key: ""
+    timeout_sec: 30.0
+    use_openai_format: false
