@@ -6,6 +6,7 @@ plus map metadata for downstream segmentation.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import numpy as np
 
 from nav_msgs.msg import OccupancyGrid
@@ -27,8 +28,14 @@ class MapIngestorNode(Node):
         self.bridge = CvBridge()
         self.map_received = False
 
+        map_qos = QoSProfile(
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
         self.sub_map = self.create_subscription(
-            OccupancyGrid, map_topic, self._on_map, 10
+            OccupancyGrid, map_topic, self._on_map, map_qos
         )
 
         self.pub_grid_image = self.create_publisher(
