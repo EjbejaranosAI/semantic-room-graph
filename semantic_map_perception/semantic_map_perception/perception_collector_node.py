@@ -25,6 +25,7 @@ class PerceptionCollectorNode(Node):
 
         camera_topic = self.get_parameter('camera_topic').value
         self.capture_delay = self.get_parameter('capture_delay_sec').value
+        self.camera_topic = camera_topic
 
         self.bridge = CvBridge()
         self.latest_image = None
@@ -55,12 +56,6 @@ class PerceptionCollectorNode(Node):
     def _on_visit(self, msg: Int32):
         region_id = msg.data
 
-        if self.latest_image is None:
-            self.get_logger().warn(
-                f'No image available for region {region_id}, skipping capture.'
-            )
-            return
-
         timer = self.create_timer(
             self.capture_delay,
             lambda: self._capture_once(region_id, timer),
@@ -71,6 +66,9 @@ class PerceptionCollectorNode(Node):
         self.destroy_timer(timer)
 
         if self.latest_image is None:
+            self.get_logger().warn(
+                f'No image available for region {region_id} on {self.camera_topic}.'
+            )
             return
 
         obs = RegionObservation()

@@ -118,6 +118,7 @@ class RegionSegmentationNode(Node):
             ws_label_offset = 2
 
         region_nodes = []
+        kept_ws_labels = []
         for idx, _ in enumerate(valid_labels):
             ws_label = idx + ws_label_offset if ws_label_offset else valid_labels[idx]
             mask = (markers == ws_label).astype(np.uint8)
@@ -148,6 +149,7 @@ class RegionSegmentationNode(Node):
             node.ocr_text = []
             node.neighbors = []
             region_nodes.append(node)
+            kept_ws_labels.append(ws_label)
 
         graph = SemanticGraph()
         graph.header.stamp = self.get_clock().now().to_msg()
@@ -160,10 +162,11 @@ class RegionSegmentationNode(Node):
 
         n_regions = len(region_nodes)
         label_vis = np.zeros_like(binary)
-        for idx in range(n_regions):
-            ws_label = idx + ws_label_offset if ws_label_offset else valid_labels[idx]
-            intensity = int((idx + 1) * (255 // max(n_regions, 1)))
-            label_vis[markers == ws_label] = min(255, max(1, intensity))
+        for idx, ws_label in enumerate(kept_ws_labels):
+            # Keep labels aligned with region_nodes order (1..N)
+            # so downstream nodes can map region index -> label reliably.
+            intensity = min(255, idx + 1)
+            label_vis[markers == ws_label] = intensity
         label_msg = self.bridge.cv2_to_imgmsg(label_vis, encoding='mono8')
         label_msg.header.stamp = self.get_clock().now().to_msg()
         label_msg.header.frame_id = 'map'

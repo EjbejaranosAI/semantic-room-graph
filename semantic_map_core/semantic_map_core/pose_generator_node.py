@@ -96,9 +96,6 @@ class PoseGeneratorNode(Node):
         h = binary.shape[0]
 
         dist_map = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
-        n_regions = max(len(graph.regions), 1)
-        label_step = max(1, 255 // n_regions)
-
         for idx, region in enumerate(graph.regions):
             entry_wx = region.entry_pose.position.x
             entry_wy = region.entry_pose.position.y
@@ -112,7 +109,7 @@ class PoseGeneratorNode(Node):
             px = np.clip(px, 0, binary.shape[1] - 1)
             py = np.clip(py, 0, binary.shape[0] - 1)
 
-            region_label_value = int((idx + 1) * label_step)
+            region_label_value = idx + 1
             region_mask = (label_img == region_label_value)
 
             best_px, best_py = self._find_best_free_pose(
