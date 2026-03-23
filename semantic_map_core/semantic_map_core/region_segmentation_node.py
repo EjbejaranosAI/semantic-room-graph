@@ -35,6 +35,8 @@ class RegionSegmentationNode(Node):
         self.declare_parameter('erosion_max_m', 2.0)
         self.declare_parameter('erosion_step_m', 0.15)
         self.declare_parameter('grid_cell_size_m', 3.0)
+        self.declare_parameter('exclude_border_regions', True)
+        self.declare_parameter('border_margin_px', 2)
 
         self.morph_k = self.get_parameter('morph_kernel_size').value
         self.min_area = self.get_parameter('min_region_area').value
@@ -42,6 +44,8 @@ class RegionSegmentationNode(Node):
         self.erosion_max_m = self.get_parameter('erosion_max_m').value
         self.erosion_step_m = self.get_parameter('erosion_step_m').value
         self.grid_cell_m = self.get_parameter('grid_cell_size_m').value
+        self.exclude_border_regions = self.get_parameter('exclude_border_regions').value
+        self.border_margin_px = self.get_parameter('border_margin_px').value
 
         self.bridge = CvBridge()
         self.grid_image = None
@@ -120,6 +124,11 @@ class RegionSegmentationNode(Node):
             area = int(np.sum(mask))
             if area < self.min_area:
                 continue
+            if self.exclude_border_regions and self._touches_border(mask):
+                self.get_logger().debug(
+                    f'Discarding border region (label={ws_label}, area={area})'
+                )
+                continue
 
             ys, xs = np.where(mask > 0)
             cx, cy = float(np.mean(xs)), float(np.mean(ys))
@@ -168,6 +177,7 @@ class RegionSegmentationNode(Node):
         min_e = max(3, int(self.erosion_min_m / resolution))
         max_e = max(min_e + 2, int(self.erosion_max_m / resolution))
         step = max(1, int(self.erosion_step_m / resolution))
+        best = None
 
         for e_px in range(min_e, max_e + 1, step):
             k = cv2.getStructuringElement(
@@ -182,11 +192,18 @@ class RegionSegmentationNode(Node):
             ]
 
             if len(valid) >= 2:
-                return cc_labels, valid, (
+                candidate = (
+                    cc_labels,
+                    valid,
+                    e_px,
                     f'{len(valid)} seeds via erosion '
                     f'{e_px}px ({e_px * resolution:.2f}m)'
                 )
+                if best is None or len(valid) > len(best[1]):
+                    best = candidate
 
+        if best is not None:
+            return best[0], best[1], best[3]
         return self._grid_fallback(clean, resolution)
 
     def _grid_fallback(self, clean, resolution):
@@ -234,6 +251,17 @@ class RegionSegmentationNode(Node):
         if aspect > 3.0:
             return 'corridor'
         return 'room'
+
+    def _touches_border(self, mask: np.ndarray) -> bool:
+        h, w = mask.shape
+        m = int(max(1, self.border_margin_px))
+        top = mask[:m, :]
+        bottom = mask[h - m:, :]
+        left = mask[:, :m]
+        right = mask[:, w - m:]
+        return bool(
+            np.any(top > 0) or np.any(bottom > 0) or np.any(left > 0) or np.any(right > 0)
+        )
 
 
 def main(args=None):

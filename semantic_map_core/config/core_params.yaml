@@ -15,6 +15,8 @@ region_segmentation_node:
     erosion_max_m: 2.0
     erosion_step_m: 0.15
     grid_cell_size_m: 3.0
+    exclude_border_regions: true
+    border_margin_px: 2
 
 topological_graph_builder_node:
   ros__parameters:
