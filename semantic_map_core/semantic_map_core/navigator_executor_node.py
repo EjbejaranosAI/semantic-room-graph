@@ -29,7 +29,9 @@ class NavigatorExecutorNode(Node):
         super().__init__('navigator_executor_node')
 
         self.declare_parameter('goal_timeout_sec', 120.0)
+        self.declare_parameter('use_inspection_fallback', True)
         self.goal_timeout = self.get_parameter('goal_timeout_sec').value
+        self.use_inspection_fallback = self.get_parameter('use_inspection_fallback').value
 
         self.cb_group = ReentrantCallbackGroup()
         self.graph = None
@@ -37,6 +39,8 @@ class NavigatorExecutorNode(Node):
         self.current_goal_idx = 0
         self.navigating = False
         self.server_available = False
+        self.inspection_attempted = set()
+        self.active_goal_uses_inspection = False
 
         self.sub_graph = self.create_subscription(
             SemanticGraph, '/semantic_map/graph_with_poses',
@@ -70,6 +74,7 @@ class NavigatorExecutorNode(Node):
     def _on_plan(self, msg: Int32MultiArray):
         self.exploration_plan = list(msg.data)
         self.current_goal_idx = 0
+        self.inspection_attempted.clear()
         self.get_logger().info(
             f'Received exploration plan: {self.exploration_plan}'
         )
@@ -111,16 +116,22 @@ class NavigatorExecutorNode(Node):
             self._send_next_goal()
             return
 
+        use_inspection = (
+            self.use_inspection_fallback and region_id in self.inspection_attempted
+        )
+        goal_pose = region.inspection_pose if use_inspection else region.entry_pose
+
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()
         goal.pose.header.frame_id = 'map'
         goal.pose.header.stamp = self.get_clock().now().to_msg()
-        goal.pose.pose = region.entry_pose
+        goal.pose.pose = goal_pose
+        self.active_goal_uses_inspection = use_inspection
 
         self.get_logger().info(
             f'Navigating to region {region_id} '
-            f'({region.entry_pose.position.x:.2f}, '
-            f'{region.entry_pose.position.y:.2f})'
+            f'({"inspection" if use_inspection else "entry"} pose: '
+            f'{goal_pose.position.x:.2f}, {goal_pose.position.y:.2f})'
         )
 
         if not self.server_available:
@@ -144,8 +155,17 @@ class NavigatorExecutorNode(Node):
 
     def _goal_response_cb(self, future):
         goal_handle = future.result()
+        region_id = self.exploration_plan[self.current_goal_idx]
         if not goal_handle.accepted:
-            self.get_logger().warn('Goal rejected by Nav2.')
+            self.get_logger().warn(f'Goal rejected by Nav2 for region {region_id}.')
+            if self.use_inspection_fallback and not self.active_goal_uses_inspection:
+                self.get_logger().warn(
+                    f'Retrying region {region_id} with inspection pose.'
+                )
+                self.inspection_attempted.add(region_id)
+                self.navigating = False
+                self._send_next_goal()
+                return
             self.navigating = False
             self.current_goal_idx += 1
             self._send_next_goal()
@@ -167,6 +187,14 @@ class NavigatorExecutorNode(Node):
             self.get_logger().warn(
                 f'Navigation to region {region_id} failed (status={result.status})'
             )
+            if self.use_inspection_fallback and not self.active_goal_uses_inspection:
+                self.get_logger().warn(
+                    f'Retrying region {region_id} with inspection pose after failure.'
+                )
+                self.inspection_attempted.add(region_id)
+                self.navigating = False
+                self._send_next_goal()
+                return
 
         self.navigating = False
         self.current_goal_idx += 1

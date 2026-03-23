@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import math
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from std_msgs.msg import Int32MultiArray
 
 from semantic_map_msgs.msg import SemanticGraph
@@ -28,9 +28,13 @@ class ExplorationPlannerNode(Node):
 
         self.declare_parameter('replan_on_update', True)
         self.declare_parameter('visit_corridors', False)
+        self.declare_parameter('robot_pose_topic', '/robot_pose')
+        self.declare_parameter('use_amcl_fallback', True)
 
         self.replan_on_update = self.get_parameter('replan_on_update').value
         self.visit_corridors = self.get_parameter('visit_corridors').value
+        self.robot_pose_topic = self.get_parameter('robot_pose_topic').value
+        self.use_amcl_fallback = self.get_parameter('use_amcl_fallback').value
         self.graph = None
         self.robot_pose = None
 
@@ -38,8 +42,13 @@ class ExplorationPlannerNode(Node):
             SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, _LATCHED_QOS
         )
         self.sub_pose = self.create_subscription(
-            PoseStamped, '/robot_pose', self._on_pose, 10
+            PoseStamped, self.robot_pose_topic, self._on_pose, 10
         )
+        self.sub_amcl = None
+        if self.use_amcl_fallback:
+            self.sub_amcl = self.create_subscription(
+                PoseWithCovarianceStamped, '/amcl_pose', self._on_amcl_pose, 10
+            )
 
         self.pub_plan = self.create_publisher(
             Int32MultiArray, '/semantic_map/exploration_plan', _LATCHED_QOS
@@ -49,6 +58,14 @@ class ExplorationPlannerNode(Node):
 
     def _on_pose(self, msg: PoseStamped):
         self.robot_pose = msg
+
+    def _on_amcl_pose(self, msg: PoseWithCovarianceStamped):
+        if self.robot_pose is not None:
+            return
+        pose = PoseStamped()
+        pose.header = msg.header
+        pose.pose = msg.pose.pose
+        self.robot_pose = pose
 
     def _on_graph(self, msg: SemanticGraph):
         self.graph = msg
@@ -84,6 +101,9 @@ class ExplorationPlannerNode(Node):
             start_x = self.robot_pose.pose.position.x
             start_y = self.robot_pose.pose.position.y
         else:
+            self.get_logger().warn(
+                f'No robot pose on {self.robot_pose_topic}; starting from first region.'
+            )
             start_x = unexplored[0].entry_pose.position.x
             start_y = unexplored[0].entry_pose.position.y
 

@@ -32,10 +32,13 @@ exploration_planner_node:
   ros__parameters:
     replan_on_update: true
     visit_corridors: false
+    robot_pose_topic: "/robot_pose"
+    use_amcl_fallback: true
 
 navigator_executor_node:
   ros__parameters:
     goal_timeout_sec: 120.0
+    use_inspection_fallback: true
 
 semantic_fusion_node:
   ros__parameters:

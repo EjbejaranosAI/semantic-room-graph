@@ -7,6 +7,7 @@ publishes a RegionObservation message.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 from std_msgs.msg import Int32
 from sensor_msgs.msg import Image
@@ -35,7 +36,7 @@ class PerceptionCollectorNode(Node):
             Int32, '/semantic_map/region_visit_event', self._on_visit, 10
         )
         self.sub_image = self.create_subscription(
-            Image, camera_topic, self._on_image, 10
+            Image, camera_topic, self._on_image, qos_profile_sensor_data
         )
         self.sub_pose = self.create_subscription(
             PoseStamped, '/robot_pose', self._on_pose, 10
