@@ -10,10 +10,14 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
+import math
+import numpy as np
 
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Int32, Int32MultiArray
+from std_msgs.msg import Int32, Int32MultiArray, Float32MultiArray
 from nav2_msgs.action import NavigateToPose
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 from semantic_map_msgs.msg import SemanticGraph
 
@@ -30,17 +34,28 @@ class NavigatorExecutorNode(Node):
 
         self.declare_parameter('goal_timeout_sec', 120.0)
         self.declare_parameter('use_inspection_fallback', True)
+        self.declare_parameter('candidate_radius_m', 0.7)
+        self.declare_parameter('max_goal_attempts_per_region', 8)
+        self.declare_parameter('goal_clearance_px', 2)
         self.goal_timeout = self.get_parameter('goal_timeout_sec').value
         self.use_inspection_fallback = self.get_parameter('use_inspection_fallback').value
+        self.candidate_radius_m = self.get_parameter('candidate_radius_m').value
+        self.max_goal_attempts = self.get_parameter('max_goal_attempts_per_region').value
+        self.goal_clearance_px = self.get_parameter('goal_clearance_px').value
 
         self.cb_group = ReentrantCallbackGroup()
         self.graph = None
+        self.grid_image = None
+        self.map_meta = None
+        self.bridge = CvBridge()
         self.exploration_plan = []
         self.current_goal_idx = 0
         self.navigating = False
         self.server_available = False
-        self.inspection_attempted = set()
-        self.active_goal_uses_inspection = False
+        self.goal_candidates = {}
+        self.goal_attempt_idx = {}
+        self.failed_regions = set()
+        self.active_goal_candidate_idx = 0
 
         self.sub_graph = self.create_subscription(
             SemanticGraph, '/semantic_map/graph_with_poses',
@@ -51,6 +66,12 @@ class NavigatorExecutorNode(Node):
             Int32MultiArray, '/semantic_map/exploration_plan',
             self._on_plan, _LATCHED_QOS,
             callback_group=self.cb_group,
+        )
+        self.sub_grid = self.create_subscription(
+            Image, '/semantic_map/grid_image', self._on_grid, _LATCHED_QOS
+        )
+        self.sub_meta = self.create_subscription(
+            Float32MultiArray, '/semantic_map/map_metadata', self._on_meta, _LATCHED_QOS
         )
 
         self.pub_visit_event = self.create_publisher(
@@ -71,10 +92,18 @@ class NavigatorExecutorNode(Node):
         )
         self._try_navigate()
 
+    def _on_grid(self, msg: Image):
+        self.grid_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
+
+    def _on_meta(self, msg: Float32MultiArray):
+        self.map_meta = msg.data
+
     def _on_plan(self, msg: Int32MultiArray):
         self.exploration_plan = list(msg.data)
         self.current_goal_idx = 0
-        self.inspection_attempted.clear()
+        self.goal_candidates.clear()
+        self.goal_attempt_idx.clear()
+        self.failed_regions.clear()
         self.get_logger().info(
             f'Received exploration plan: {self.exploration_plan}'
         )
@@ -99,7 +128,13 @@ class NavigatorExecutorNode(Node):
 
     def _send_next_goal(self):
         if self.current_goal_idx >= len(self.exploration_plan):
-            self.get_logger().info('Exploration complete: all regions visited.')
+            if self.failed_regions:
+                self.get_logger().warn(
+                    f'Exploration finished with failed regions: '
+                    f'{sorted(self.failed_regions)}'
+                )
+            else:
+                self.get_logger().info('Exploration complete: all regions visited.')
             self.navigating = False
             return
 
@@ -116,21 +151,32 @@ class NavigatorExecutorNode(Node):
             self._send_next_goal()
             return
 
-        use_inspection = (
-            self.use_inspection_fallback and region_id in self.inspection_attempted
-        )
-        goal_pose = region.inspection_pose if use_inspection else region.entry_pose
+        if region_id not in self.goal_candidates:
+            self.goal_candidates[region_id] = self._build_goal_candidates(region)
+            self.goal_attempt_idx[region_id] = 0
+
+        candidates = self.goal_candidates.get(region_id, [])
+        attempt_idx = self.goal_attempt_idx.get(region_id, 0)
+        if attempt_idx >= len(candidates) or attempt_idx >= self.max_goal_attempts:
+            self.get_logger().warn(
+                f'No valid goal candidates left for region {region_id}; skipping.'
+            )
+            self.failed_regions.add(region_id)
+            self.current_goal_idx += 1
+            self._send_next_goal()
+            return
+        goal_pose = candidates[attempt_idx]
+        self.active_goal_candidate_idx = attempt_idx
 
         goal = NavigateToPose.Goal()
         goal.pose = PoseStamped()
         goal.pose.header.frame_id = 'map'
         goal.pose.header.stamp = self.get_clock().now().to_msg()
         goal.pose.pose = goal_pose
-        self.active_goal_uses_inspection = use_inspection
 
         self.get_logger().info(
             f'Navigating to region {region_id} '
-            f'({"inspection" if use_inspection else "entry"} pose: '
+            f'(candidate {attempt_idx + 1}/{len(candidates)}: '
             f'{goal_pose.position.x:.2f}, {goal_pose.position.y:.2f})'
         )
 
@@ -158,16 +204,8 @@ class NavigatorExecutorNode(Node):
         region_id = self.exploration_plan[self.current_goal_idx]
         if not goal_handle.accepted:
             self.get_logger().warn(f'Goal rejected by Nav2 for region {region_id}.')
-            if self.use_inspection_fallback and not self.active_goal_uses_inspection:
-                self.get_logger().warn(
-                    f'Retrying region {region_id} with inspection pose.'
-                )
-                self.inspection_attempted.add(region_id)
-                self.navigating = False
-                self._send_next_goal()
-                return
+            self.goal_attempt_idx[region_id] = self.active_goal_candidate_idx + 1
             self.navigating = False
-            self.current_goal_idx += 1
             self._send_next_goal()
             return
 
@@ -183,22 +221,76 @@ class NavigatorExecutorNode(Node):
             visit_msg = Int32()
             visit_msg.data = region_id
             self.pub_visit_event.publish(visit_msg)
+            self.goal_candidates.pop(region_id, None)
+            self.goal_attempt_idx.pop(region_id, None)
         else:
             self.get_logger().warn(
                 f'Navigation to region {region_id} failed (status={result.status})'
             )
-            if self.use_inspection_fallback and not self.active_goal_uses_inspection:
-                self.get_logger().warn(
-                    f'Retrying region {region_id} with inspection pose after failure.'
-                )
-                self.inspection_attempted.add(region_id)
-                self.navigating = False
-                self._send_next_goal()
-                return
+            self.goal_attempt_idx[region_id] = self.active_goal_candidate_idx + 1
+            self.navigating = False
+            self._send_next_goal()
+            return
 
         self.navigating = False
         self.current_goal_idx += 1
         self._send_next_goal()
+
+    def _build_goal_candidates(self, region):
+        seeds = [region.entry_pose]
+        if self.use_inspection_fallback:
+            seeds.append(region.inspection_pose)
+
+        candidates = []
+        radial = [0.0, self.candidate_radius_m, -self.candidate_radius_m]
+        lateral = [0.0, self.candidate_radius_m * 0.6, -self.candidate_radius_m * 0.6]
+        for seed in seeds:
+            for dx in radial:
+                for dy in lateral:
+                    p = PoseStamped().pose
+                    p.position.x = seed.position.x + dx
+                    p.position.y = seed.position.y + dy
+                    p.position.z = 0.0
+                    p.orientation = seed.orientation
+                    if self._is_world_pose_free(p.position.x, p.position.y):
+                        if not self._is_duplicate_pose(candidates, p):
+                            candidates.append(p)
+
+        if not candidates:
+            if self._is_world_pose_free(region.entry_pose.position.x, region.entry_pose.position.y):
+                candidates.append(region.entry_pose)
+            elif self._is_world_pose_free(
+                region.inspection_pose.position.x, region.inspection_pose.position.y
+            ):
+                candidates.append(region.inspection_pose)
+        return candidates
+
+    def _is_duplicate_pose(self, poses, pose, min_dist=0.25):
+        for p in poses:
+            if math.hypot(p.position.x - pose.position.x, p.position.y - pose.position.y) < min_dist:
+                return True
+        return False
+
+    def _is_world_pose_free(self, wx, wy):
+        if self.grid_image is None or self.map_meta is None or len(self.map_meta) < 5:
+            return True
+        h, w = self.grid_image.shape
+        resolution = float(self.map_meta[2])
+        if resolution <= 0:
+            return True
+        origin_x = float(self.map_meta[3])
+        origin_y = float(self.map_meta[4])
+        px = int((wx - origin_x) / resolution)
+        py = h - 1 - int((wy - origin_y) / resolution)
+        if px < 0 or px >= w or py < 0 or py >= h:
+            return False
+        r = int(max(0, self.goal_clearance_px))
+        x0 = max(0, px - r)
+        x1 = min(w, px + r + 1)
+        y0 = max(0, py - r)
+        y1 = min(h, py + r + 1)
+        patch = self.grid_image[y0:y1, x0:x1]
+        return bool(np.all(patch > 0))
 
 
 def main(args=None):

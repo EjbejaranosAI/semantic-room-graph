@@ -39,6 +39,9 @@ navigator_executor_node:
   ros__parameters:
     goal_timeout_sec: 120.0
     use_inspection_fallback: true
+    candidate_radius_m: 0.7
+    max_goal_attempts_per_region: 8
+    goal_clearance_px: 2
 
 semantic_fusion_node:
   ros__parameters:
