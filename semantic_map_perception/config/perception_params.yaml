@@ -15,8 +15,8 @@ ocr_node:
 vlm_labeler_node:
   ros__parameters:
     # Ollama (local, default)
-    api_url: "http://localhost:11434/api/chat"
-    model_name: "llava"
+    api_url: "http://172.17.0.1:11434/api/chat"
+    model_name: "qwen3-vl:4b"
     api_key: ""
-    timeout_sec: 30.0
+    timeout_sec: 60.0
     use_openai_format: false
