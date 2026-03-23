@@ -27,8 +27,10 @@ class ExplorationPlannerNode(Node):
         super().__init__('exploration_planner_node')
 
         self.declare_parameter('replan_on_update', True)
+        self.declare_parameter('visit_corridors', False)
 
         self.replan_on_update = self.get_parameter('replan_on_update').value
+        self.visit_corridors = self.get_parameter('visit_corridors').value
         self.graph = None
         self.robot_pose = None
 
@@ -60,6 +62,16 @@ class ExplorationPlannerNode(Node):
         unexplored = [
             r for r in self.graph.regions if r.status == 'unexplored'
         ]
+        if not self.visit_corridors:
+            room_candidates = [
+                r for r in unexplored if r.region_type_geom.lower() == 'room'
+            ]
+            if room_candidates:
+                unexplored = room_candidates
+            else:
+                self.get_logger().warn(
+                    'No room-like regions found; falling back to all unexplored regions.'
+                )
 
         if not unexplored:
             self.get_logger().info('All regions explored. No plan to generate.')

@@ -4,7 +4,7 @@
 
 perception_collector_node:
   ros__parameters:
-    camera_topic: "/head_front_camera/rgb/image_raw"
+    camera_topic: "/head_front_camera/color/image_raw"
     capture_delay_sec: 1.0
 
 ocr_node:

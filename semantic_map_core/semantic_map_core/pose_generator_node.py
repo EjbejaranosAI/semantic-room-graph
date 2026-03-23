@@ -113,7 +113,12 @@ class PoseGeneratorNode(Node):
             region_mask = (label_img == region_label_value)
 
             best_px, best_py = self._find_best_free_pose(
-                dist_map, px, py, search_radius=30, allowed_mask=region_mask
+                dist_map,
+                px,
+                py,
+                search_radius=30,
+                allowed_mask=region_mask,
+                min_clearance_px=int(max(1, self.safety_margin)),
             )
 
             region.entry_pose.position.x = origin_x + best_px * resolution
@@ -155,11 +160,15 @@ class PoseGeneratorNode(Node):
 
     def _find_best_free_pose(
         self, dist_map: np.ndarray, cx: int, cy: int, search_radius: int,
-        allowed_mask: np.ndarray
+        allowed_mask: np.ndarray, min_clearance_px: int
     ) -> tuple:
         h, w = dist_map.shape
         traversable_mask = (dist_map > 0.0)
         candidate_mask = traversable_mask & allowed_mask
+        candidate_mask = self._select_component_near_seed(candidate_mask, cx, cy)
+        strict_candidate_mask = candidate_mask & (dist_map >= float(min_clearance_px))
+        if np.any(strict_candidate_mask):
+            candidate_mask = strict_candidate_mask
         if not np.any(candidate_mask):
             best_d = dist_map[cy, cx] if 0 <= cy < h and 0 <= cx < w else 0.0
             return (cx, cy) if best_d > 0.0 else self._nearest_free(dist_map, cx, cy)
@@ -191,6 +200,28 @@ class PoseGeneratorNode(Node):
                 k = int(np.argmax(dist_map[ys, xs]))
                 return int(xs[k]), int(ys[k])
         return best
+
+    def _select_component_near_seed(
+        self, mask: np.ndarray, cx: int, cy: int
+    ) -> np.ndarray:
+        if not np.any(mask):
+            return mask
+        n_cc, cc = cv2.connectedComponents(mask.astype(np.uint8))
+        if n_cc <= 2:
+            return mask
+
+        if 0 <= cy < cc.shape[0] and 0 <= cx < cc.shape[1]:
+            seed_lbl = int(cc[cy, cx])
+            if seed_lbl > 0:
+                return (cc == seed_lbl)
+
+        ys, xs = np.where(mask)
+        sq = (xs - cx) ** 2 + (ys - cy) ** 2
+        i = int(np.argmin(sq))
+        nearest_lbl = int(cc[int(ys[i]), int(xs[i])])
+        if nearest_lbl > 0:
+            return (cc == nearest_lbl)
+        return mask
 
     def _nearest_free(self, dist_map: np.ndarray, cx: int, cy: int) -> tuple:
         ys, xs = np.where(dist_map > 0.0)

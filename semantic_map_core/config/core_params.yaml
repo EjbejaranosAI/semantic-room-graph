@@ -31,6 +31,7 @@ pose_generator_node:
 exploration_planner_node:
   ros__parameters:
     replan_on_update: true
+    visit_corridors: false
 
 navigator_executor_node:
   ros__parameters:
