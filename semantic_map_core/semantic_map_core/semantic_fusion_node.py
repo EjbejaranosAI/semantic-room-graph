@@ -8,10 +8,17 @@ either valid OCR exists or VLM confidence exceeds the threshold.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 from typing import Dict
 
 from semantic_map_msgs.msg import (
     OCRResult, VLMResult, SemanticGraph, RegionNode
+)
+
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
 )
 
 
@@ -30,7 +37,7 @@ class SemanticFusionNode(Node):
         self.vlm_buffer: Dict[int, VLMResult] = {}
 
         self.sub_graph = self.create_subscription(
-            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, 10
+            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, _LATCHED_QOS
         )
         self.sub_ocr = self.create_subscription(
             OCRResult, '/semantic_map/ocr_result', self._on_ocr, 10
@@ -40,7 +47,7 @@ class SemanticFusionNode(Node):
         )
 
         self.pub_semantic_graph = self.create_publisher(
-            SemanticGraph, '/semantic_map/semantic_graph', 10
+            SemanticGraph, '/semantic_map/semantic_graph', _LATCHED_QOS
         )
 
         self.get_logger().info(

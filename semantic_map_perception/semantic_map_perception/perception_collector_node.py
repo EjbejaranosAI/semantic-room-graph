@@ -61,13 +61,15 @@ class PerceptionCollectorNode(Node):
             )
             return
 
-        # Delayed capture: use a timer to wait for the robot to settle
-        self.create_timer(
+        timer = self.create_timer(
             self.capture_delay,
-            lambda: self._capture_and_publish(region_id),
+            lambda: self._capture_once(region_id, timer),
         )
 
-    def _capture_and_publish(self, region_id: int):
+    def _capture_once(self, region_id: int, timer):
+        timer.cancel()
+        self.destroy_timer(timer)
+
         if self.latest_image is None:
             return
 

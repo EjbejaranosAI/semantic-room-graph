@@ -7,11 +7,18 @@ Provides a service to reload the graph from file.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import json
 import os
 
 from std_srvs.srv import Trigger
 from semantic_map_msgs.msg import SemanticGraph
+
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+)
 
 
 class GraphStoreNode(Node):
@@ -31,11 +38,11 @@ class GraphStoreNode(Node):
         self.latest_graph = None
 
         self.sub_graph = self.create_subscription(
-            SemanticGraph, '/semantic_map/semantic_graph', self._on_graph, 10
+            SemanticGraph, '/semantic_map/semantic_graph', self._on_graph, _LATCHED_QOS
         )
 
         self.pub_loaded_graph = self.create_publisher(
-            SemanticGraph, '/semantic_map/semantic_graph', 10
+            SemanticGraph, '/semantic_map/semantic_graph', _LATCHED_QOS
         )
 
         self.srv_save = self.create_service(

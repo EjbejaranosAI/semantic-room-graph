@@ -11,6 +11,7 @@ import numpy as np
 import cv2
 
 from sensor_msgs.msg import Image
+from std_msgs.msg import Float32MultiArray
 from cv_bridge import CvBridge
 
 from semantic_map_msgs.msg import SemanticGraph, RegionEdge
@@ -35,6 +36,7 @@ class TopologicalGraphBuilderNode(Node):
         self.bridge = CvBridge()
         self.label_image = None
         self.regions_raw = None
+        self.map_meta = None
 
         self.sub_regions = self.create_subscription(
             SemanticGraph, '/semantic_map/regions_raw', self._on_regions, _LATCHED_QOS
@@ -42,12 +44,19 @@ class TopologicalGraphBuilderNode(Node):
         self.sub_label_img = self.create_subscription(
             Image, '/semantic_map/label_image', self._on_label_image, _LATCHED_QOS
         )
+        self.sub_meta = self.create_subscription(
+            Float32MultiArray, '/semantic_map/map_metadata', self._on_meta, _LATCHED_QOS
+        )
 
         self.pub_topo_graph = self.create_publisher(
             SemanticGraph, '/semantic_map/topological_graph', _LATCHED_QOS
         )
 
         self.get_logger().info('TopologicalGraphBuilderNode ready.')
+
+    def _on_meta(self, msg: Float32MultiArray):
+        self.map_meta = msg.data
+        self._try_build()
 
     def _on_label_image(self, msg: Image):
         self.label_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
@@ -58,11 +67,16 @@ class TopologicalGraphBuilderNode(Node):
         self._try_build()
 
     def _try_build(self):
-        if self.label_image is None or self.regions_raw is None:
+        if self.label_image is None or self.regions_raw is None or self.map_meta is None:
             return
 
         regions = self.regions_raw.regions
         n = len(regions)
+        resolution = self.regions_raw.map_resolution
+        origin_x = float(self.map_meta[3])
+        origin_y = float(self.map_meta[4])
+        h = self.label_image.shape[0]
+
         if n < 2:
             out = SemanticGraph()
             out.header.stamp = self.get_clock().now().to_msg()
@@ -70,12 +84,14 @@ class TopologicalGraphBuilderNode(Node):
             out.regions = list(regions)
             out.edges = []
             out.map_frame = self.regions_raw.map_frame
-            out.map_resolution = self.regions_raw.map_resolution
+            out.map_resolution = resolution
             self.pub_topo_graph.publish(out)
+            self.get_logger().info(
+                f'Topological graph built: {n} regions, 0 edges'
+            )
             return
 
         label_img = self.label_image
-        resolution = self.regions_raw.map_resolution
 
         unique_labels = sorted(set(label_img.flatten()) - {0})
         label_to_region = {}
@@ -83,7 +99,9 @@ class TopologicalGraphBuilderNode(Node):
             if i < n:
                 label_to_region[lbl] = i
 
-        kernel = np.ones((self.adj_dilation * 2 + 1, self.adj_dilation * 2 + 1), np.uint8)
+        kernel = np.ones(
+            (self.adj_dilation * 2 + 1, self.adj_dilation * 2 + 1), np.uint8
+        )
         edges = []
         neighbor_map = {r.region_id: set() for r in regions}
 
@@ -112,17 +130,14 @@ class TopologicalGraphBuilderNode(Node):
                 tx = float(np.mean(xs))
                 ty = float(np.mean(ys))
 
-                origin_x = self.regions_raw.regions[0].entry_pose.position.x if regions else 0.0
-                origin_y = self.regions_raw.regions[0].entry_pose.position.y if regions else 0.0
-
                 transition_width_m = overlap_area * resolution
 
                 edge = RegionEdge()
                 edge.header.stamp = self.get_clock().now().to_msg()
                 edge.source_region_id = rid_i
                 edge.target_region_id = rid_j
-                edge.transition_pose.position.x = tx * resolution + origin_x
-                edge.transition_pose.position.y = (label_img.shape[0] - ty) * resolution + origin_y
+                edge.transition_pose.position.x = origin_x + tx * resolution
+                edge.transition_pose.position.y = origin_y + (h - ty) * resolution
                 edge.transition_pose.position.z = 0.0
                 edge.transition_pose.orientation.w = 1.0
                 edge.transition_width = float(transition_width_m)
@@ -141,7 +156,7 @@ class TopologicalGraphBuilderNode(Node):
         out.regions = region_list
         out.edges = edges
         out.map_frame = self.regions_raw.map_frame
-        out.map_resolution = self.regions_raw.map_resolution
+        out.map_resolution = resolution
 
         self.pub_topo_graph.publish(out)
         self.get_logger().info(

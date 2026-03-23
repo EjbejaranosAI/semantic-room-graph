@@ -11,7 +11,10 @@ region_segmentation_node:
   ros__parameters:
     morph_kernel_size: 5
     min_region_area: 500
-    distance_threshold_ratio: 0.3
+    erosion_min_m: 0.3
+    erosion_max_m: 2.0
+    erosion_step_m: 0.15
+    grid_cell_size_m: 3.0
 
 topological_graph_builder_node:
   ros__parameters:
