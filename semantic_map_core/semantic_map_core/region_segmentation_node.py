@@ -7,6 +7,7 @@ segmented regions as a labeled image + region metadata.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import numpy as np
 import cv2
 
@@ -33,11 +34,17 @@ class RegionSegmentationNode(Node):
         self.grid_image = None
         self.map_meta = None
 
+        latched_qos = QoSProfile(
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
         self.sub_grid = self.create_subscription(
-            Image, '/semantic_map/grid_image', self._on_grid, 10
+            Image, '/semantic_map/grid_image', self._on_grid, latched_qos
         )
         self.sub_meta = self.create_subscription(
-            Float32MultiArray, '/semantic_map/map_metadata', self._on_meta, 10
+            Float32MultiArray, '/semantic_map/map_metadata', self._on_meta, latched_qos
         )
 
         self.pub_regions = self.create_publisher(
@@ -51,10 +58,14 @@ class RegionSegmentationNode(Node):
 
     def _on_meta(self, msg: Float32MultiArray):
         self.map_meta = msg.data
+        self._try_segment()
 
     def _on_grid(self, msg: Image):
         self.grid_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
-        if self.map_meta is not None:
+        self._try_segment()
+
+    def _try_segment(self):
+        if self.grid_image is not None and self.map_meta is not None:
             self._segment()
 
     def _segment(self):

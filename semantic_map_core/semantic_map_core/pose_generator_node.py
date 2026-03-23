@@ -6,6 +6,7 @@ topological graph, ensuring poses are in navigable free space.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import numpy as np
 import cv2
 import math
@@ -30,8 +31,14 @@ class PoseGeneratorNode(Node):
         self.grid_image = None
         self.topo_graph = None
 
+        latched_qos = QoSProfile(
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
         self.sub_grid = self.create_subscription(
-            Image, '/semantic_map/grid_image', self._on_grid, 10
+            Image, '/semantic_map/grid_image', self._on_grid, latched_qos
         )
         self.sub_topo = self.create_subscription(
             SemanticGraph, '/semantic_map/topological_graph', self._on_topo, 10

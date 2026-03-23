@@ -38,11 +38,17 @@ class MapIngestorNode(Node):
             OccupancyGrid, map_topic, self._on_map, map_qos
         )
 
+        latched_qos = QoSProfile(
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
         self.pub_grid_image = self.create_publisher(
-            Image, '/semantic_map/grid_image', 10
+            Image, '/semantic_map/grid_image', latched_qos
         )
         self.pub_map_metadata = self.create_publisher(
-            Float32MultiArray, '/semantic_map/map_metadata', 10
+            Float32MultiArray, '/semantic_map/map_metadata', latched_qos
         )
 
         self.get_logger().info('MapIngestorNode ready, waiting for /map ...')
