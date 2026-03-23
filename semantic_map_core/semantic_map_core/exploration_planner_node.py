@@ -57,7 +57,11 @@ class ExplorationPlannerNode(Node):
         self.get_logger().info('ExplorationPlannerNode ready.')
 
     def _on_pose(self, msg: PoseStamped):
+        had_pose = self.robot_pose is not None
         self.robot_pose = msg
+        if self.replan_on_update and self.graph is not None and not had_pose:
+            self.get_logger().info('Robot pose received; replanning from current position.')
+            self._plan()
 
     def _on_amcl_pose(self, msg: PoseWithCovarianceStamped):
         if self.robot_pose is not None:
@@ -66,6 +70,9 @@ class ExplorationPlannerNode(Node):
         pose.header = msg.header
         pose.pose = msg.pose.pose
         self.robot_pose = pose
+        if self.replan_on_update and self.graph is not None:
+            self.get_logger().info('AMCL pose received; replanning from current position.')
+            self._plan()
 
     def _on_graph(self, msg: SemanticGraph):
         self.graph = msg

@@ -164,6 +164,32 @@ class GraphVisualizerNode(Node):
             arrow.text = f'#{k+1}'
             ma.markers.append(arrow)
 
+        if len(self.plan) >= 2:
+            path_line = Marker()
+            path_line.header.frame_id = 'map'
+            path_line.header.stamp = stamp
+            path_line.ns = 'plan_path'
+            path_line.id = 0
+            path_line.type = Marker.LINE_STRIP
+            path_line.action = Marker.ADD
+            path_line.scale.x = 0.12
+            path_line.color = ColorRGBA(r=0.1, g=1.0, b=0.2, a=0.95)
+            points = []
+            for rid in self.plan:
+                region = self._find_region(rid)
+                if region is None:
+                    continue
+                points.append(
+                    Point(
+                        x=region.entry_pose.position.x,
+                        y=region.entry_pose.position.y,
+                        z=0.35,
+                    )
+                )
+            if len(points) >= 2:
+                path_line.points = points
+                ma.markers.append(path_line)
+
         self.pub_markers.publish(ma)
 
     def _find_region(self, region_id):
