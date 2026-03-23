@@ -31,6 +31,7 @@ setup(
             'navigator_executor_node = semantic_map_core.navigator_executor_node:main',
             'semantic_fusion_node = semantic_map_core.semantic_fusion_node:main',
             'graph_store_node = semantic_map_core.graph_store_node:main',
+            'graph_visualizer_node = semantic_map_core.graph_visualizer_node:main',
         ],
     },
 )

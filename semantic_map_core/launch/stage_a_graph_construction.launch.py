@@ -104,4 +104,12 @@ def generate_launch_description():
             parameters=[core_config],
             output='screen',
         ),
+
+        # --- Visualization ---
+        Node(
+            package='semantic_map_core',
+            executable='graph_visualizer_node',
+            name='graph_visualizer_node',
+            output='screen',
+        ),
     ])
