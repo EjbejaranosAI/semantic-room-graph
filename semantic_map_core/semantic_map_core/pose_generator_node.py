@@ -41,11 +41,11 @@ class PoseGeneratorNode(Node):
             Image, '/semantic_map/grid_image', self._on_grid, latched_qos
         )
         self.sub_topo = self.create_subscription(
-            SemanticGraph, '/semantic_map/topological_graph', self._on_topo, 10
+            SemanticGraph, '/semantic_map/topological_graph', self._on_topo, latched_qos
         )
 
         self.pub_graph = self.create_publisher(
-            SemanticGraph, '/semantic_map/graph_with_poses', 10
+            SemanticGraph, '/semantic_map/graph_with_poses', latched_qos
         )
 
         self.get_logger().info('PoseGeneratorNode ready.')

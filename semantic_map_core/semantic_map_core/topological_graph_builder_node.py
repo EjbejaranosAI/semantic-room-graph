@@ -6,6 +6,7 @@ boundaries / narrow transition zones between region pairs.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import numpy as np
 import cv2
 
@@ -13,6 +14,12 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
 from semantic_map_msgs.msg import SemanticGraph, RegionEdge
+
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+)
 
 
 class TopologicalGraphBuilderNode(Node):
@@ -30,14 +37,14 @@ class TopologicalGraphBuilderNode(Node):
         self.regions_raw = None
 
         self.sub_regions = self.create_subscription(
-            SemanticGraph, '/semantic_map/regions_raw', self._on_regions, 10
+            SemanticGraph, '/semantic_map/regions_raw', self._on_regions, _LATCHED_QOS
         )
         self.sub_label_img = self.create_subscription(
-            Image, '/semantic_map/label_image', self._on_label_image, 10
+            Image, '/semantic_map/label_image', self._on_label_image, _LATCHED_QOS
         )
 
         self.pub_topo_graph = self.create_publisher(
-            SemanticGraph, '/semantic_map/topological_graph', 10
+            SemanticGraph, '/semantic_map/topological_graph', _LATCHED_QOS
         )
 
         self.get_logger().info('TopologicalGraphBuilderNode ready.')

@@ -9,12 +9,19 @@ Publish RViz MarkerArray for the semantic room graph and exploration plan.
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 
 from std_msgs.msg import Int32MultiArray, ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 
 from semantic_map_msgs.msg import SemanticGraph
+
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+)
 
 
 PALETTE = [
@@ -39,13 +46,13 @@ class GraphVisualizerNode(Node):
         self.plan = []
 
         self.sub_graph = self.create_subscription(
-            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, 10
+            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, _LATCHED_QOS
         )
         self.sub_topo = self.create_subscription(
-            SemanticGraph, '/semantic_map/topological_graph', self._on_topo, 10
+            SemanticGraph, '/semantic_map/topological_graph', self._on_topo, _LATCHED_QOS
         )
         self.sub_plan = self.create_subscription(
-            Int32MultiArray, '/semantic_map/exploration_plan', self._on_plan, 10
+            Int32MultiArray, '/semantic_map/exploration_plan', self._on_plan, _LATCHED_QOS
         )
 
         self.pub_markers = self.create_publisher(

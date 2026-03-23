@@ -61,10 +61,10 @@ class RegionSegmentationNode(Node):
         )
 
         self.pub_regions = self.create_publisher(
-            SemanticGraph, '/semantic_map/regions_raw', 10
+            SemanticGraph, '/semantic_map/regions_raw', latched_qos
         )
         self.pub_label_image = self.create_publisher(
-            Image, '/semantic_map/label_image', 10
+            Image, '/semantic_map/label_image', latched_qos
         )
 
         self.get_logger().info('RegionSegmentationNode ready.')

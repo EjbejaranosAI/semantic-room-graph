@@ -9,12 +9,19 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int32, Int32MultiArray
 from nav2_msgs.action import NavigateToPose
 
 from semantic_map_msgs.msg import SemanticGraph
+
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+)
 
 
 class NavigatorExecutorNode(Node):
@@ -31,10 +38,10 @@ class NavigatorExecutorNode(Node):
         self.navigating = False
 
         self.sub_graph = self.create_subscription(
-            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, 10
+            SemanticGraph, '/semantic_map/graph_with_poses', self._on_graph, _LATCHED_QOS
         )
         self.sub_plan = self.create_subscription(
-            Int32MultiArray, '/semantic_map/exploration_plan', self._on_plan, 10
+            Int32MultiArray, '/semantic_map/exploration_plan', self._on_plan, _LATCHED_QOS
         )
 
         self.pub_visit_event = self.create_publisher(
